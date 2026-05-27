@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thai Street Food Online | คิดไม่ออกบอกแม่ค้า</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+    <style>
+        body { font-family: 'Kanit', sans-serif; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-red-50 to-amber-100 min-h-screen flex flex-col justify-between antialiased selection:bg-red-200">
+
+    <main class="flex-grow flex items-center justify-center p-4">
+        <div class="max-w-md w-full bg-white rounded-3xl shadow-xl border border-red-100 p-6 md:p-8 text-center transition-all duration-300">
+            
+            <div class="mb-6">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl shadow-lg shadow-red-500/30 mb-3">
+                    <i class="fa-solid fa-cloud text-2xl"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-slate-800">บอกแม่ค้า.. แบบออนไลน์!</h1>
+                <p class="text-sm text-slate-500 mt-1">คลังสุ่มอาหารตามสั่งส่วนกลาง แชร์ร่วมกันทุกคน</p>
+            </div>
+
+            <div id="food-card" class="bg-slate-50 rounded-2xl p-6 min-h-[140px] flex flex-col items-center justify-center border border-slate-100 mb-6 transition-all duration-300">
+                <h2 id="food-name" class="text-2xl font-bold text-slate-400 transition-all duration-150">กำลังเชื่อมต่อฐานข้อมูลออนไลน์...</h2>
+            </div>
+
+            <button id="random-btn" disabled class="w-full bg-gradient-to-r from-red-500 to-amber-500 opacity-50 cursor-not-allowed text-white font-semibold py-4 px-6 rounded-2xl shadow-lg active:scale-[0.98] transition-all duration-150 text-lg flex items-center justify-center gap-2 mb-6">
+                <i class="fa-solid fa-dice text-xl"></i>
+                <span>สุ่มเมนูอาหาร</span>
+            </button>
+
+            <div class="relative flex py-2 items-center mb-4">
+                <div class="flex-grow border-t border-slate-200"></div>
+                <span id="menu-count" class="flex-shrink mx-4 text-xs font-medium text-slate-400 bg-white px-2">คลังเมนูออนไลน์: โหลด...</span>
+                <div class="flex-grow border-t border-slate-200"></div>
+            </div>
+
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-left">
+                <label for="new-food" class="block text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">เพิ่มเมนูใหม่เข้าสู่ระบบออนไลน์</label>
+                <div class="flex gap-2">
+                    <input type="text" id="new-food" disabled placeholder="รอเชื่อมต่อระบบ..." class="flex-grow px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all">
+                    <button id="add-btn" disabled class="bg-slate-400 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-md cursor-not-allowed transition-all flex items-center justify-center">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="text-center pb-4 text-xs text-slate-400 font-light">
+        Create by PICH | Online Database Powered by Firebase
+    </footer>
+
+    <script>
+        // 🛠️ เปลี่ยนข้อมูลตรงนี้ให้เป็นคีย์ที่ได้จากบัญชี Firebase ของคุณเอง 🛠️
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // เริ่มต้นการทำงานของ Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ดึง Element จากหน้าเว็บ
+        const randomBtn = document.getElementById('random-btn');
+        const addBtn = document.getElementById('add-btn');
+        const newFoodInput = document.getElementById('new-food');
+        const foodCard = document.getElementById('food-card');
+        const foodName = document.getElementById('food-name');
+        const menuCountSpan = document.getElementById('menu-count');
+
+        let foodDatabase = [];
+        let isRolling = false;
+
+        // ดึงข้อมูลจาก Firebase Realtime Database แบบ Realtime (.on)
+        db.ref('thaiFoodDatabase').on('value', (snapshot) => {
+            const data = snapshot.val();
+            
+            if (data) {
+                // เปลี่ยนโครงสร้างข้อมูล Object ของ Firebase ให้กลับมาเป็น Array ทั่วไป
+                foodDatabase = Object.values(data);
+            } else {
+                // หากเปิดฐานข้อมูลครั้งแรกแล้วยังไม่มีข้อมูลเลย ให้สร้างเมนูเริ่มต้นให้ระบบอัตโนมัติ
+                const defaultFoods = ["ข้าวกะเพราหมูกรอบไข่ดาว", "ข้าวกะเพราเนื้อสับ", "ข้าวคะน้าหมูกรอบ", "ข้าวผัดกุ้ง", "ข้าวไข่เจียวทรงเครื่อง"];
+                defaultFoods.forEach(food => {
+                    db.ref('thaiFoodDatabase').push(food);
+                });
+                return;
+            }
+
+            // เมื่อโหลดข้อมูลเสร็จแล้ว ให้เปิดใช้งานปุ่มต่างๆ บนหน้าเว็บ
+            menuCountSpan.innerText = `คลังเมนูออนไลน์: ${foodDatabase.length} รายการ`;
+            if (foodName.innerText === "กำลังเชื่อมต่อฐานข้อมูลออนไลน์...") {
+                foodName.innerText = "ระบบพร้อมแล้ว ลุยเลย!";
+                foodName.classList.remove('text-slate-400');
+                foodName.classList.add('text-slate-800');
+            }
+            
+            randomBtn.disabled = false;
+            randomBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            newFoodInput.disabled = false;
+            newFoodInput.placeholder = "เช่น ข้าวกะเพราแหนม...";
+            addBtn.disabled = false;
+            addBtn.className = "bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow-md active:scale-95 transition-all flex items-center justify-center";
+        }, (error) => {
+            foodName.innerText = "เชื่อมต่อล้มเหลว! ตรวจสอบการตั้งค่า Rules บน Firebase";
+            console.error(error);
+        });
+
+        // 🎲 ระบบสุ่มอาหาร (ดึงมาจาก Array ออนไลน์ที่อัปเดตตลอดเวลา)
+        randomBtn.addEventListener('click', () => {
+            if (isRolling || foodDatabase.length === 0) return;
+            isRolling = true;
+
+            foodCard.classList.add('border-red-300', 'bg-red-50/50');
+            foodName.classList.add('scale-95', 'text-red-500');
+            randomBtn.disabled = true;
+
+            let counter = 0;
+            const interval = setInterval(() => {
+                const tempFood = foodDatabase[Math.floor(Math.random() * foodDatabase.length)];
+                foodName.innerText = tempFood;
+                
+                counter++;
+                if (counter > 12) { 
+                    clearInterval(interval);
+                    
+                    const finalFood = foodDatabase[Math.floor(Math.random() * foodDatabase.length)];
+                    foodName.innerText = finalFood;
+
+                    foodCard.classList.remove('border-red-300', 'bg-red-50/50');
+                    foodName.classList.remove('scale-95', 'text-red-500');
+                    
+                    randomBtn.disabled = false;
+                    isRolling = false;
+                }
+            }, 90); 
+        });
+
+        // ➕ ระบบเพิ่มเมนูใหม่ ส่งขึ้นไปบันทึกบนคลัง Cloud ออนไลน์
+        addBtn.addEventListener('click', () => {
+            const newFoodText = newFoodInput.value.trim();
+            
+            if (newFoodText === "") {
+                alert("กรุณากรอกชื่อเมนูอาหารด้วยครับ");
+                return;
+            }
+
+            // ส่งข้อมูลขึ้น Firebase
+            db.ref('thaiFoodDatabase').push(newFoodText)
+                .then(() => {
+                    newFoodInput.value = "";
+                    foodName.innerText = `เพิ่มเมนู "${newFoodText}" เข้าสู่ระบบออนไลน์เรียบร้อย!`;
+                })
+                .catch((err) => {
+                    alert("ไม่สามารถเพิ่มข้อมูลได้เนื่องจากติดสิทธิ์ความปลอดภัย (Rules)");
+                    console.error(err);
+                });
+        });
+
+        // กด Enter ในช่องพิมพ์เพื่อกดเพิ่มเมนูได้ทันที
+        newFoodInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
